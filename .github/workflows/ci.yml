@@ -1,0 +1,45 @@
+name: Pipeline Doctor CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      cause_failure:
+        description: 'Set to True to trigger a simulated failure'
+        required: false
+        default: 'False'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: Run Application
+      id: run_app
+      run: |
+        # Use 'tee' to capture logs while still seeing them in the console
+        # '|| true' ensures the step doesn't fail here, we handle it later
+        export CAUSE_FAILURE=${{ github.event.inputs.cause_failure || 'False' }}
+        python app/app.py 2>&1 | tee build.log
+        # Exit with the actual status of the python command
+        exit ${PIPESTATUS[0]}
+
+    - name: Pipeline Doctor Analysis
+      if: failure()
+      run: |
+        echo "⚠️ Build failed! Summoning the Pipeline Doctor..."
+        python doctor/pipeline_doctor.py build.log
+
+    - name: Success Message
+      if: success()
+      run: echo "✅ Build passed! No doctor needed today."
